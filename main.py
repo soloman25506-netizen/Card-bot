@@ -1,48 +1,75 @@
 import os
 import re
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, CopyTextButton
-from telegram.ext import Application, MessageHandler, ContextTypes, filters
-
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    CopyTextButton,
+)
+from telegram.ext import (
+    Application,
+    MessageHandler,
+    ContextTypes,
+    filters,
+)
 
 TOKEN = os.getenv("BOT_TOKEN")
 
 
 def parse_character(text):
+    if not text:
+        return None
+
     # Rarity
     rarity_match = re.search(
-        r"RARITY\s*:\s*([A-Za-z]+)",
+        r"RARITY\s*:\s*([^\n]+)",
         text,
         re.IGNORECASE
     )
 
-    if not rarity_match:
-        return None
-
-    rarity = rarity_match.group(1).strip()
-
     # ID
-    # Example: 330: Class 3-E
+    # Example:
+    # 330: Class 3-E
     id_match = re.search(
-        r"(?:^|\n|\s)(\d+)\s*:",
+        r"(?m)^\s*(\d+)\s*:",
         text
     )
 
-    if not id_match:
+    if not rarity_match or not id_match:
         return None
 
+    rarity = rarity_match.group(1).strip()
     character_id = id_match.group(1)
 
     return rarity, character_id
 
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_message(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
     message = update.effective_message
 
-    if not message or not message.text:
+    if not message:
         return
 
-    result = parse_character(message.text)
+    # User က Reply ထားတဲ့ message ကို အရင်ဖတ်မယ်
+    source_text = None
+
+    if message.reply_to_message:
+        replied = message.reply_to_message
+
+        source_text = (
+            replied.text
+            or replied.caption
+        )
+
+    # Reply မဟုတ်ရင် ကိုယ်ပို့တဲ့စာကို ဖတ်မယ်
+    if not source_text:
+        source_text = message.text or message.caption
+
+    result = parse_character(source_text)
 
     if not result:
         return
@@ -54,7 +81,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
-                text="📋 Copy .gift",
+                "📋 Copy .gift",
                 copy_text=CopyTextButton(
                     text=gift_command
                 )
@@ -71,6 +98,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def error_handler(
+    update: object,
+    context: ContextTypes.DEFAULT_TYPE
+):
+    print("ERROR:", context.error)
+
+
 def main():
     if not TOKEN:
         raise RuntimeError("BOT_TOKEN is not set")
@@ -79,13 +113,18 @@ def main():
 
     app.add_handler(
         MessageHandler(
-            filters.TEXT & ~filters.COMMAND,
+            filters.ALL,
             handle_message
         )
     )
 
-    print("Bot is running...")
-    app.run_polling()
+    app.add_error_handler(error_handler)
+
+    print("Bot running...")
+
+    app.run_polling(
+        drop_pending_updates=True
+    )
 
 
 if __name__ == "__main__":
