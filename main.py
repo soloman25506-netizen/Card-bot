@@ -1,82 +1,86 @@
 import os
 import re
 
-from telegram import (
-    Update,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    CopyTextButton,
-)
-from telegram.ext import (
-    Application,
-    MessageHandler,
-    ContextTypes,
-    filters,
-)
-
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, CopyTextButton
+from telegram.ext import Application, MessageHandler, ContextTypes, filters
 
 
-async def find_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = update.effective_message
+TOKEN = os.getenv("BOT_TOKEN")
 
-    if not message:
-        return
 
-    # Text / Photo Caption
-    text = message.text or message.caption
-
-    if not text:
-        return
-
-    # Rarity ပါရမယ်
-    rarity = re.search(
-        r"\bRARITY\s*:\s*(?:Legendary|Mystical|Mythical|Rare|Uncommon|Common)\b",
+def parse_character(text):
+    # Rarity
+    rarity_match = re.search(
+        r"RARITY\s*:\s*([A-Za-z]+)",
         text,
         re.IGNORECASE
     )
 
-    if not rarity:
-        return
+    if not rarity_match:
+        return None
 
-    # Card ID ရှာမယ်
-    # ဥပမာ - 6969: Nishikigi Chisato
+    rarity = rarity_match.group(1).strip()
+
+    # ID
+    # Example: 330: Class 3-E
     id_match = re.search(
-        r"(?<!\d)(\d{2,10})\s*:",
+        r"(?:^|\n|\s)(\d+)\s*:",
         text
     )
 
     if not id_match:
+        return None
+
+    character_id = id_match.group(1)
+
+    return rarity, character_id
+
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.effective_message
+
+    if not message or not message.text:
         return
 
-    card_id = id_match.group(1)
-    gift = f".gift {card_id}"
+    result = parse_character(message.text)
+
+    if not result:
+        return
+
+    rarity, character_id = result
+
+    gift_command = f".gift {character_id}"
 
     keyboard = InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
-                text=f"📋 Copy {gift}",
-                copy_text=CopyTextButton(text=gift)
+                text="📋 Copy .gift",
+                copy_text=CopyTextButton(
+                    text=gift_command
+                )
             )
         ]
     ])
 
     await message.reply_text(
-        f"🎴 Card ID: `{card_id}`\n"
-        f"⭐ Rarity: `{rarity.group(0)}`\n\n"
-        f"`{gift}`",
-        reply_markup=keyboard,
-        parse_mode="Markdown"
+        f"⭐ Rarity: {rarity}\n"
+        f"🆔 ID: {character_id}\n\n"
+        f"<code>{gift_command}</code>",
+        parse_mode="HTML",
+        reply_markup=keyboard
     )
 
 
 def main():
-    app = Application.builder().token(BOT_TOKEN).build()
+    if not TOKEN:
+        raise RuntimeError("BOT_TOKEN is not set")
+
+    app = Application.builder().token(TOKEN).build()
 
     app.add_handler(
         MessageHandler(
-            filters.TEXT | filters.PHOTO,
-            find_card
+            filters.TEXT & ~filters.COMMAND,
+            handle_message
         )
     )
 
