@@ -1,7 +1,12 @@
 import os
 import re
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    CopyTextButton,
+)
 from telegram.ext import (
     Application,
     MessageHandler,
@@ -12,30 +17,24 @@ from telegram.ext import (
 TOKEN = os.getenv("BOT_TOKEN")
 
 
-def extract_data(text):
+def find_id(text):
     if not text:
         return None
 
-    # ID — ဥပမာ "65: Ayanokoji..."
-    id_match = re.search(r"(?m)^\s*(\d+)\s*:", text)
+    # 65: Character Name
+    # 330: Class 3-E
+    match = re.search(r"(?m)^\s*(\d+)\s*:", text)
 
-    # Rarity — ဥပမာ "RARITY: Uncommon"
-    rarity_match = re.search(
-        r"RARITY\s*:\s*([^\n]+)",
-        text,
-        re.IGNORECASE
-    )
+    if match:
+        return match.group(1)
 
-    if not id_match or not rarity_match:
-        return None
-
-    character_id = id_match.group(1)
-    rarity = rarity_match.group(1).strip()
-
-    return character_id, rarity
+    return None
 
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_message(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
     message = update.effective_message
 
     if not message:
@@ -43,46 +42,35 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = message.text or message.caption
 
-    # Forward လုပ်ထားတဲ့ message ရဲ့ content ကိုဖတ်မယ်
-    if message.forward_origin:
-        text = message.text or message.caption
+    if not text:
+        return
 
-    result = extract_data(text)
+    character_id = find_id(text)
 
-    if not result:
+    if not character_id:
         await message.reply_text(
-            "❌ ID / Rarity မတွေ့ပါဘူး။\n\n"
-            "Character Catcher message ကို ဒီ Bot ထဲ Forward လုပ်ပါ။"
+            "❌ ID မတွေ့ပါဘူး။"
         )
         return
 
-    character_id, rarity = result
-    gift = f".gift {character_id}"
+    gift_code = f".gift {character_id}"
 
     keyboard = InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
                 "📋 Copy",
-                callback_data=f"copy:{character_id}"
+                copy_text=CopyTextButton(
+                    text=gift_code
+                )
             )
         ]
     ])
 
     await message.reply_text(
-        f"⭐ Rarity: {rarity}\n"
         f"🆔 ID: {character_id}\n\n"
-        f"<code>{gift}</code>\n\n"
-        f"Copy လုပ်ဖို့ အောက်က Button ကိုနှိပ်ပါ။",
+        f"<code>{gift_code}</code>",
         parse_mode="HTML",
         reply_markup=keyboard
-    )
-
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "🤖 Card Gift Bot\n\n"
-        "Character Catcher message ကို ဒီထဲ Forward လုပ်ပါ။\n"
-        "ID + Rarity ကို အလိုအလျောက်ထုတ်ပေးပါမယ်။"
     )
 
 
@@ -93,18 +81,17 @@ def main():
     app = Application.builder().token(TOKEN).build()
 
     app.add_handler(
-        MessageHandler(filters.COMMAND, start)
-    )
-
-    app.add_handler(
         MessageHandler(
-            filters.TEXT | filters.CaptionRegex(".+"),
+            filters.TEXT | filters.CAPTION,
             handle_message
         )
     )
 
     print("Bot running...")
-    app.run_polling(drop_pending_updates=True)
+
+    app.run_polling(
+        drop_pending_updates=True
+    )
 
 
 if __name__ == "__main__":
