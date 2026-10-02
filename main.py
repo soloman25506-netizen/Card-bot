@@ -21,9 +21,13 @@ def find_id(text):
     if not text:
         return None
 
-    # 65: Character Name
+    # Examples:
+    # 65: Ayanokoji Kiyotaka
     # 330: Class 3-E
-    match = re.search(r"(?m)^\s*(\d+)\s*:", text)
+    match = re.search(
+        r"(?m)^\s*(\d+)\s*:",
+        text
+    )
 
     if match:
         return match.group(1)
@@ -40,21 +44,30 @@ async def handle_message(
     if not message:
         return
 
+    # Message ထဲက text / caption ကိုယူမယ်
     text = message.text or message.caption
 
     if not text:
+        await message.reply_text(
+            "❌ စာသားကို မဖတ်နိုင်ပါဘူး။"
+        )
         return
 
+    # ID ရှာမယ်
     character_id = find_id(text)
 
     if not character_id:
         await message.reply_text(
-            "❌ ID မတွေ့ပါဘူး။"
+            "❌ ID မတွေ့ပါဘူး။\n\n"
+            "ဥပမာ:\n"
+            "65: Character Name"
         )
         return
 
-    gift_code = f".gift {character_id}"
+    # .cgift ID
+    gift_code = f".cgift {character_id}"
 
+    # Copy button
     keyboard = InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
@@ -74,12 +87,35 @@ async def handle_message(
     )
 
 
+async def start(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+    await update.message.reply_text(
+        "🤖 Card Gift Bot\n\n"
+        "Character message ကို ဒီ Bot ထဲ ပို့ပါ။\n\n"
+        "Bot က ID ကိုရှာပြီး\n"
+        ".cgift ID အဖြစ် Copy လုပ်လို့ရအောင် ပြပေးပါမယ်။"
+    )
+
+
 def main():
     if not TOKEN:
-        raise RuntimeError("BOT_TOKEN မရှိပါ")
+        raise RuntimeError(
+            "BOT_TOKEN မသတ်မှတ်ထားပါ။"
+        )
 
     app = Application.builder().token(TOKEN).build()
 
+    # /start
+    app.add_handler(
+        MessageHandler(
+            filters.COMMAND,
+            start
+        )
+    )
+
+    # Normal text / caption
     app.add_handler(
         MessageHandler(
             filters.TEXT | filters.CAPTION,
